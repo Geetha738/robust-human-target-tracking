@@ -7,3 +7,5 @@ env/
 .pytest_cache/
 .idea/
 .DS_Store
+test.mp4
+yolo11n.pt

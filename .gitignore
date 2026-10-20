@@ -1,11 +1,12 @@
-__pycache__/
+﻿__pycache__/
 *.py[cod]
 .venv/
 venv/
 env/
 .env
-.pytest_cache/
+.env.*
+!.env.example
+.vscode/
 .idea/
 .DS_Store
-test.mp4
-yolo11n.pt
+Thumbs.db

@@ -25,7 +25,7 @@ VARIANTS = {
 }
 
 
-def run_variant(name, source, cache, point, sel_frame, gt):
+def run_variant(name, source, cache, point, sel_frame, gt):  # cache = cached tracker output to replay
     cfg = Config()
     rec = MetricsRecorder(gt)
     mgr = run_session(cached_tracked_frames(source, cache),
@@ -40,11 +40,15 @@ def main():
     ap.add_argument("--select-point", required=True)
     ap.add_argument("--select-frame", type=int, default=0)
     ap.add_argument("--gt", default=None)
+    ap.add_argument("--existing-tracks", default=None,
+                    help="tracks cached with ANOTHER existing tracker (e.g. BoT-SORT+ReID) for the existing column")
     ap.add_argument("--out", default="comparison.json")
     a = ap.parse_args()
     point = tuple(float(v) for v in a.select_point.split(","))
     cache, gt = load_cache(a.tracks), (load_gt(a.gt) if a.gt else None)
-    res = {n: run_variant(n, a.source, cache, point, a.select_frame, gt) for n in VARIANTS}
+    ex_cache = load_cache(a.existing_tracks) if a.existing_tracks else cache
+    res = {n: run_variant(n, a.source, ex_cache if n == "existing" else cache, point, a.select_frame, gt)
+           for n in VARIANTS}
 
     det_ms = cache.get("_meta", {}).get("det_ms_avg")
     for n in res:                                   # whole-pipeline speed estimate
@@ -74,7 +78,7 @@ def main():
             continue
         print(f"{label:<36}" + "".join(f"{str(v):>12}" for v in vals))
     with open(a.out, "w") as f:
-        json.dump(res, f, indent=2)
+        json.dump(res, f, indent=2, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
     print(f"\nSaved {a.out}")
 
 

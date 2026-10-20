@@ -28,6 +28,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", required=True, help="video path or webcam index")
     ap.add_argument("--model", default="yolo11n.pt")
+    ap.add_argument("--no-identity-check", action="store_true", help="never auto-correct the target ID (most conservative)")
+    ap.add_argument("--tracker", default="bytetrack.yaml", help="bytetrack.yaml | botsort.yaml | botsort_reid.yaml | ...")
     ap.add_argument("--imgsz", type=int, default=640, help="detector input size; smaller = faster (e.g. 480, 320)")
     ap.add_argument("--baseline", action="store_true", help="disable occlusion-type reasoning")
     ap.add_argument("--no-display", action="store_true")
@@ -40,7 +42,7 @@ def main():
     ap.add_argument("--out", default="results")
     args = ap.parse_args()
 
-    cfg = Config(model=args.model, imgsz=args.imgsz)
+    cfg = Config(model=args.model, imgsz=args.imgsz, tracker=args.tracker, verify_identity=not args.no_identity_check)
     os.makedirs(args.out, exist_ok=True)
     tracker = PersonTracker(cfg)
     recorder = MetricsRecorder(load_gt(args.gt) if args.gt else None)

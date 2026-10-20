@@ -24,7 +24,10 @@ def draw(frame, tracks, info, hint=None, fps=None):
     for t in tracks:
         x1, y1, x2, y2 = map(int, t.box)
         is_t = info.state == State.ACQUIRED and t.id == info.target_id
-        if is_t:
+        if is_t and info.uncertain:                # identity not confirmed after a crossing
+            cv2.rectangle(out, (x1, y1), (x2, y2), (0, 165, 255), thick * 2)
+            _label(out, "VERIFYING IDENTITY", (x1, max(22, y1 - 4)), (0, 0, 0), (0, 165, 255), 0.6, 2)
+        elif is_t:
             overlay = out.copy()                   # translucent green fill = very obvious
             cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), -1)
             out = cv2.addWeighted(overlay, 0.25, out, 0.75, 0)
@@ -49,6 +52,10 @@ def draw(frame, tracks, info, hint=None, fps=None):
         label += "  [searching whole frame]"
     if info.state == State.LOST:
         label += " - still watching for the target"
+    if info.uncertain and info.state == State.ACQUIRED:
+        label += " - verifying identity"
+    if info.confirm and info.state in (State.REACQUIRING, State.LOST):
+        label += f"  confirming {info.confirm[0]}/{info.confirm[1]}"
     if info.ambiguous:
         label += "  AMBIGUOUS - waiting"
     bar = max(28, H // 20)

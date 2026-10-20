@@ -1,0 +1,76 @@
+{
+  "existing": {
+    "frames": 260,
+    "state_frames": {
+      "IDLE": 3,
+      "ACQUIRED": 37,
+      "OCCLUDED": 220
+    },
+    "occlusion_events": 1,
+    "reacquired": 0,
+    "lost": 0,
+    "id_corrections": 0,
+    "id_switches": 0,
+    "avg_reacq_frames": null,
+    "ambiguous_frames": 0,
+    "manager_ms_avg": 0.01,
+    "avg_fps": 1324.5,
+    "tracking_accuracy": 0.318,
+    "wrong_lock_frames": 0,
+    "false_lock_when_absent": 0,
+    "false_reacquisitions": 0,
+    "correct_reacquisitions": 0,
+    "detector_ms_avg": 38.0,
+    "pipeline_fps_est": 26.3
+  },
+  "base": {
+    "frames": 260,
+    "state_frames": {
+      "IDLE": 3,
+      "ACQUIRED": 103,
+      "OCCLUDED": 5,
+      "REACQUIRING": 149
+    },
+    "occlusion_events": 1,
+    "reacquired": 1,
+    "lost": 0,
+    "id_corrections": 0,
+    "id_switches": 1,
+    "avg_reacq_frames": 154.0,
+    "ambiguous_frames": 0,
+    "manager_ms_avg": 0.09,
+    "avg_fps": 1401.5,
+    "tracking_accuracy": 0.909,
+    "wrong_lock_frames": 0,
+    "false_lock_when_absent": 0,
+    "false_reacquisitions": 0,
+    "correct_reacquisitions": 1,
+    "detector_ms_avg": 38.0,
+    "pipeline_fps_est": 26.3
+  },
+  "ours": {
+    "frames": 260,
+    "state_frames": {
+      "IDLE": 3,
+      "ACQUIRED": 103,
+      "OCCLUDED": 5,
+      "REACQUIRING": 149
+    },
+    "occlusion_events": 1,
+    "reacquired": 1,
+    "lost": 0,
+    "id_corrections": 0,
+    "id_switches": 1,
+    "avg_reacq_frames": 154.0,
+    "ambiguous_frames": 0,
+    "manager_ms_avg": 0.14,
+    "avg_fps": 1293.1,
+    "tracking_accuracy": 0.909,
+    "wrong_lock_frames": 0,
+    "false_lock_when_absent": 0,
+    "false_reacquisitions": 0,
+    "correct_reacquisitions": 1,
+    "detector_ms_avg": 38.0,
+    "pipeline_fps_est": 26.2
+  }
+}

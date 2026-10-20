@@ -50,8 +50,10 @@ class MetricsRecorder:
         s["occlusion_events"] = len(occ)
         s["reacquired"] = len(rea)
         s["lost"] = len(lost)
+        s["id_corrections"] = sum(1 for e in events if e["type"] == "id_corrected")
         s["id_switches"] = sum(1 for e in rea if e["old_id"] != e["new_id"])
         s["avg_reacq_frames"] = round(float(np.mean([e["duration"] for e in rea])), 1) if rea else None
+        s["verifying_frames"] = sum(1 for _, i in self.rows if i.uncertain)
         s["ambiguous_frames"] = sum(1 for _, i in self.rows if i.ambiguous)
         if self.mgr_times:
             s["manager_ms_avg"] = round(1000 * float(np.mean(self.mgr_times)), 2)
@@ -64,14 +66,14 @@ class MetricsRecorder:
             correct = wrong = 0
             for f in vis:
                 i = by_frame[f]
-                if i.state.value == "ACQUIRED" and i.box is not None:
+                if i.state.value == "ACQUIRED" and i.box is not None and not i.uncertain:
                     v = iou(i.box, self.gt[f])
-                    correct += v >= 0.5
-                    wrong += v < 0.3
+                    correct += int(v >= 0.5)
+                    wrong += int(v < 0.3)
             s["tracking_accuracy"] = round(correct / max(1, len(vis)), 3)
             s["wrong_lock_frames"] = int(wrong)
             # target not in the frame, yet the system claims to be tracking someone
-            s["false_lock_when_absent"] = sum(1 for f in absent if by_frame[f].state.value == "ACQUIRED")
+            s["false_lock_when_absent"] = sum(1 for f in absent if by_frame[f].state.value == "ACQUIRED" and not by_frame[f].uncertain)
             # judge each reacquisition on the first annotated frame at/after it (GT is sparse)
             ann = sorted(self.gt)
             correct_re = false_re = unverified = 0
@@ -81,10 +83,10 @@ class MetricsRecorder:
                     unverified += 1
                     continue
                 g, i = self.gt[nxt], by_frame[nxt]
-                ok = g is not None and i.state.value == "ACQUIRED" and i.box is not None \
+                ok = g is not None and i.state.value == "ACQUIRED" and i.box is not None and not i.uncertain \
                     and iou(i.box, g) >= 0.5
-                correct_re += ok
-                false_re += (not ok)
+                correct_re += int(bool(ok))
+                false_re += int(not ok)
             s["false_reacquisitions"] = false_re
             s["correct_reacquisitions"] = correct_re
             if unverified:

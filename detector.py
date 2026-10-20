@@ -10,7 +10,7 @@ class PersonTracker:
         self.model = YOLO(cfg.model)
 
     def __call__(self, frame):
-        r = self.model.track(frame, persist=True, tracker="bytetrack.yaml", classes=[0],
+        r = self.model.track(frame, persist=True, tracker=self.cfg.tracker, classes=[0],
                              conf=self.cfg.det_conf, imgsz=self.cfg.imgsz, verbose=False)[0]
         if r.boxes is None or r.boxes.id is None:
             return []

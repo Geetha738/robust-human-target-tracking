@@ -33,9 +33,9 @@ def render(people):
     return img
 
 
-def simulate(scene_fn, n_frames, reasoning, select_point, select_frame=3):
+def simulate(scene_fn, n_frames, reasoning, select_point, select_frame=3, cfg=None):
     """scene_fn(f) -> list of (track_id, box, clothes, visible, is_target)"""
-    cfg = Config()
+    cfg = cfg or Config()
     rec = MetricsRecorder()
     truth = {}
 
@@ -58,7 +58,7 @@ def final_ok(rec, truth, last_frames=15):
     ok = 0
     for f in range(len(rec.rows) - last_frames, len(rec.rows)):
         info = rec.rows[f][1]
-        if info.state.value == "ACQUIRED" and f in truth and iou(info.box, truth[f]) > 0.5:
+        if info.state.value == "ACQUIRED" and not info.uncertain and f in truth and iou(info.box, truth[f]) > 0.5:
             ok += 1
     return ok >= last_frames - 2
 
@@ -116,6 +116,53 @@ def scene_long_block(f):
     if 35 <= f < 80:
         ppl.append((2, box_at(310 + 8 * max(0, f - 60), 250), GREEN_BLACK, True, False))
     ppl.append((3, box_at(500, 380), YELLOW_WHITE, True, False))
+    return ppl
+
+
+def scene_cross(swap):
+    """A (red/blue, the target) walks right, B (green/black) walks left; they cross at f=50.
+    With swap=True the tracker hands A's ID to B and B's ID to A, as ByteTrack sometimes does."""
+    def fn(f):
+        a, b = box_at(100 + 5 * f, 250), box_at(600 - 5 * f, 250)
+        ida, idb = (1, 2) if not (swap and f >= 50) else (2, 1)
+        return [(ida, a, RED_BLUE, True, True), (idb, b, GREEN_BLACK, True, False)]
+    return fn
+
+
+
+HALF_SIMILAR = ((30, 30, 200), (30, 30, 30))   # same red top, black trousers: scores ~0.5 against the target
+
+
+def scene_blocker(mode, blocker=HALF_SIMILAR):
+    """Target A (red/blue) walks right, blocker B walks left in front of him; they cross at f=50.
+    mode='keep'      : tracker IDs stay correct
+    mode='swap'      : A and B exchange IDs at the crossing
+    mode='steal_new' : B keeps A's old ID 1, A is given a NEW id (9) - the blocker 'steals' the target"""
+    def fn(f):
+        a, b = box_at(100 + 5 * f, 250), box_at(600 - 5 * f, 250)
+        ida, idb = 1, 2
+        if f >= 50 and mode == "swap":
+            ida, idb = 2, 1
+        if f >= 50 and mode == "steal_new":
+            ida, idb = 9, 1
+        return [(ida, a, RED_BLUE, True, True), (idb, b, blocker, True, False)]
+    return fn
+
+
+def scene_static_blocker(f):
+    """B stands still. A walks right and passes BEHIND him (hidden f=48..59). While A is hidden the
+    tracker moves ID 1 onto B; when A comes out he gets a new ID (9)."""
+    a = box_at(100 + 5 * f, 250)
+    b = box_at(300, 250)
+    hidden = 48 <= f < 60
+    ppl = []
+    if f < 48:
+        ppl.append((1, a, RED_BLUE, True, True))
+        ppl.append((2, b, HALF_SIMILAR, True, False))
+    else:
+        ppl.append((1, b, HALF_SIMILAR, True, False))                   # ID 1 now sits on the blocker
+        if not hidden:
+            ppl.append((9, a, RED_BLUE, True, True))
     return ppl
 
 
@@ -182,7 +229,102 @@ def test_long_block():
     print("PASS long block: after the normal search expired, wide search found the target again")
 
 
+def test_cross():
+    from baselines import PlainFollower
+    for swap in (True, False):
+        mgr, rec, truth = simulate(scene_cross(swap), 100, True, (115, 250))
+        assert final_ok(rec, truth), f"should still follow the same person after crossing (swap={swap})"
+        fixed = [e for e in mgr.events if e["type"] == "id_corrected"]
+        assert bool(fixed) == swap, f"correction events: {fixed}"
+    # existing method follows the swapped ID onto the wrong person
+    cfg = Config(); rec = MetricsRecorder(); truth = {}
+    def frames():
+        for f in range(100):
+            objs = scene_cross(True)(f)
+            for i, b, c, v, is_t in objs:
+                if is_t: truth[f] = b
+            yield f, render([(b, c) for _, b, c, _, _ in objs]), [Track(i, b, 0.9) for i, b, _, _, _ in objs]
+    run_session(frames(), lambda s: PlainFollower(cfg, s), rec, AutoSelector((115, 250), 3))
+    assert not final_ok(rec, truth), "plain ID-following should end up on the wrong person"
+    print("PASS crossing: ID swap detected and corrected; existing method follows the wrong person")
+
+
+STRANGER = ((30, 30, 200), (30, 30, 30))      # same red top, but black trousers: similarity ~0.5
+
+
+def scene_stranger(f, target_returns):
+    """Target vanishes behind a pillar at f=60. A stranger (half-similar clothes, new id) stands
+    exactly where he disappeared. Optionally the real target returns later somewhere else."""
+    ppl = []
+    if f < 60:
+        ppl.append((1, box_at(200 + 3 * f, 250), RED_BLUE, True, True))
+    if f >= 70:
+        ppl.append((30, box_at(200 + 3 * 60 + 40, 250), STRANGER, True, False))
+    if target_returns and f >= 120:
+        ppl.append((31, box_at(500, 330), RED_BLUE, True, True))
+    return ppl
+
+
+def test_stranger_not_adopted():
+    sp = (200 + 3 * 3, 250)
+    # 1) target never returns: system must stay OCCLUDED/REACQUIRING, never adopt the stranger
+    for reasoning in (True, False):
+        mgr, rec, _ = simulate(lambda f: scene_stranger(f, False), 200, reasoning, sp)
+        assert not [e for e in mgr.events if e["type"] == "reacquired"], "adopted a stranger!"
+        assert rec.rows[-1][1].state.value != "ACQUIRED"
+    # 2) target returns elsewhere: must lock the REAL target, not the stranger
+    mgr, rec, truth = simulate(lambda f: scene_stranger(f, True), 200, True, sp)
+    assert final_ok(rec, truth), "should lock the real target"
+    # 3) proof that the OLD loose settings did adopt the stranger
+    loose = Config(min_appearance=0.30, accept_app=0.0, accept_score=0.55, confirm_frames=3,
+                   strict_min_app=0.55, strict_accept=0.62, strict_confirm=5, neg_margin=9.0)
+    old, _, _ = simulate(lambda f: scene_stranger(f, False), 200, True, sp, cfg=loose)
+    adopted = [e for e in old.events if e["type"] == "reacquired"]
+    assert adopted, "sanity check: the old loose settings should have adopted the stranger"
+    print("PASS stranger not adopted (the old loose settings DID adopt him; new settings do not)")
+
+
+def scene_flicker(f):
+    """Target hidden f=40..70; when he returns the detector drops him every 4th frame."""
+    ppl = []
+    if f < 40:
+        ppl.append((1, box_at(300, 250), RED_BLUE, True, True))
+    if f >= 70:
+        ppl.append((15, box_at(330, 250), RED_BLUE, f % 4 != 0, True))
+    return ppl
+
+
+def test_flicker_tolerance():
+    slow = dict(fast_app=2.0)                       # disable fast path: needs 8 confirmed frames
+    ok, _, _ = simulate(scene_flicker, 140, True, (300, 250), cfg=Config(**slow))
+    bad, _, _ = simulate(scene_flicker, 140, True, (300, 250), cfg=Config(confirm_tolerance=0, **slow))
+    assert [e for e in ok.events if e["type"] == "reacquired"], "should survive flicker"
+    assert not [e for e in bad.events if e["type"] == "reacquired"], "sanity: without tolerance it never confirms"
+    print("PASS flicker tolerance: a flickering detection no longer resets confirmation")
+
+
+def test_blocker_takes_id():
+    """The reported bug: a blocker (partly similar outfit) takes over the target's ID."""
+    cases = [("swap", HALF_SIMILAR), ("steal_new", HALF_SIMILAR), ("swap", RED_BLUE), ("steal_new", RED_BLUE)]
+    for mode, outfit in cases:
+        mgr, rec, truth = simulate(scene_blocker(mode, outfit), 130, True, (115, 250))
+        assert final_ok(rec, truth), f"should end on the real target ({mode}, outfit={outfit})"
+        assert [e for e in mgr.events if e["type"] == "id_corrected"], f"should correct the ID ({mode})"
+    mgr, rec, truth = simulate(scene_static_blocker, 140, True, (115, 250))
+    assert final_ok(rec, truth), "static blocker: should end on the real target"
+    # harmless crossings must NOT trigger corrections
+    for outfit in (HALF_SIMILAR, GREEN_BLACK, RED_BLUE):
+        mgr, rec, truth = simulate(scene_blocker("keep", outfit), 130, True, (115, 250))
+        assert final_ok(rec, truth) and not [e for e in mgr.events if e["type"] == "id_corrected"], "false correction"
+        assert sum(1 for _, i in rec.rows if i.uncertain) <= 8, "too many 'verifying' frames on a harmless crossing"
+    print("PASS blocker takes the ID: corrected in 5 scenes, no false corrections on harmless crossings")
+
+
 if __name__ == "__main__":
+    test_blocker_takes_id()
+    test_flicker_tolerance()
+    test_stranger_not_adopted()
+    test_cross()
     test_long_block()
     test_quality_gate()
     test_obstacle()

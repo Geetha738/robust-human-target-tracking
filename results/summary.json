@@ -1,0 +1,27 @@
+{
+  "summary": {
+    "frames": 182,
+    "state_frames": {
+      "IDLE": 1,
+      "ACQUIRED": 181
+    },
+    "occlusion_events": 0,
+    "reacquired": 0,
+    "lost": 0,
+    "id_corrections": 0,
+    "id_switches": 0,
+    "avg_reacq_frames": null,
+    "verifying_frames": 0,
+    "ambiguous_frames": 0,
+    "manager_ms_avg": 0.51,
+    "avg_fps": 14.2,
+    "detector_ms_avg": 68.85
+  },
+  "events": [
+    {
+      "type": "selected",
+      "frame": 0,
+      "id": 1
+    }
+  ]
+}
